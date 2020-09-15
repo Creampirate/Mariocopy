@@ -1,0 +1,499 @@
+def main():
+
+    import pygame
+    import sys
+    import math
+    import random
+
+    pygame.init()
+
+    #screen specs
+    width = 1000
+    height = 800
+    background_color = (0,0,0)
+    game_over_color = (255,255,255)
+
+    #platfrom variables
+    platforms =[]
+    platform_color = (153,76,0)
+    normal_platform_length = 100
+    short_platform_length = normal_platform_length/2
+    long_platform_length = 2*normal_platform_length
+    super_long_platform_length = 3*width/4
+    platform_height = 25
+
+    #player variables
+    player_standing_height = 50
+    player_crouch_height = player_standing_height/2
+    player_height = player_standing_height
+    player_width =25
+    player_speed = 3
+    player_diagonal_speed = math.sqrt((player_speed**2)/2)
+    player_jump_speed = (2.3*5/3) * player_speed
+    player_color = (0,255,0)
+    player_pos = [width/4,height-(platform_height + player_height)]
+    jump_max_time = 0.5
+    player_velocity = [0,0]
+    player_max_velocity = [15,17]
+
+    #enemy variables
+    enemies = []
+    enemy_height = 50
+    enemy_width = 25
+    enemy_color = (225,34,34)
+    enemy_speed = 8.5
+    enemy_number = 0
+    enemy_name = 'enemy'+ str(enemy_number)
+    off_screen = -1
+    enemy_spawn_probability = 0.2
+    shooty_enemy_speed = 0
+    shooty_enemies = []
+
+    #bullet variables
+    bullets = []
+    bullet_speed = 5
+    bullet_dimensions = [12.5,12.5]
+    bullet_color = (255,255,125)
+
+
+    #general game variables
+    clock = pygame.time.Clock()
+
+    screen = pygame.display.set_mode((width,height))
+
+    game_over = False
+
+    jump_available = False
+
+    frame_counter = 0
+
+    can_spwan = True
+
+    time_since_spawn = 0
+
+    gravity_strength = 5
+
+    score = 0
+    score_clolor = (255,255,0)
+
+    touching = 0
+
+    extra_jump = 0
+
+    myfont = pygame.font.SysFont("monospace",150)
+    myfont2 = pygame.font.SysFont("monospace",50)
+    myfont3 = pygame.font.SysFont('monospace',35)
+
+    #custom event
+    CATONKEYBOARD = pygame.USEREVENT+1
+
+    collison = pygame.event.Event(CATONKEYBOARD,atribute='asd')
+
+    #keeping track of currently held keys
+    a_held = False
+    d_held = False
+    w_held = False
+    s_held = False
+    w_held_duration = 0
+    w_released = False
+
+    def collision_detect(player_pos,player_width,player_height,platfor):
+
+            if player_pos[0] >= platfor.pos[0] and player_pos[0] <= platfor.pos[0]+platfor.length or platfor.pos[0] >= player_pos[0] and platfor.pos[0] <= player_pos[0]+player_width:
+
+                if player_pos[1] + player_height >= platfor.pos[1] and player_pos[1] + player_height <= platfor.pos[1] + platfor.height :
+                    return True
+            else:
+                return False
+
+    def gravity(player_velocity,player_width,player_height,platforms,gravity_strength):
+
+        gravity_on = True
+
+        for platfor in platforms:
+
+            if collision_detect(player_pos,player_width,player_height,platfor):
+                gravity_on = False
+
+        if gravity_on:
+            player_velocity[1] += gravity_strength
+        return player_velocity
+
+    def create_platforms(screen,platform_color,normal_platform_length,long_platform_length,short_platform_length,
+    super_long_platform_length,platform_height,platforms,frame_counter,can_spwan,time_since_spawn):
+
+        delay = random.random()
+
+        can_spwan = True
+
+        spwan_probability = 0.2
+
+        platform_length = normal_platform_length
+
+        platform_max_pos = platforms[-1].pos[1]-300
+        if platform_max_pos < 2*player_standing_height:
+            platform_max_pos = 2* player_standing_height
+
+        platform_pos = [width,random.randint(platform_max_pos,height-platform_height)]
+        platform_length_determinent = random.random()
+
+        if platform_length_determinent <= 1/4:
+            platform_length = normal_platform_length
+
+        elif platform_length_determinent >= 1/4 and platform_length_determinent < 2/4:
+            platform_length = long_platform_length
+
+        elif platform_length_determinent >= 2/4 and platform_length_determinent <3/4:
+            platform_length == short_platform_length
+
+        else:
+            platform_length = super_long_platform_length
+
+        for platfor in platforms:
+            if platfor.pos[0] + platfor.length >= width - 180:
+                can_spwan = False
+
+        if delay < spwan_probability and len(platforms) <= 8 and can_spwan:
+            platform(screen,platform_color,platform_pos,platform_length,platform_height,platforms)
+
+        else:
+            time_since_spawn += 1
+
+        for idx ,platfor in enumerate(platforms):
+            if platfor.pos[0] <= -platfor.length*5:
+                platforms.pop(idx)
+
+        return time_since_spawn
+
+    class platform:
+        def __init__(self,screen,platform_color,platform_pos,platform_length,platform_height,platforms):
+            self.color = platform_color
+            self.pos = platform_pos
+            self.length = platform_length
+            self.height = platform_height
+            self.screen = screen
+            platform.enemy = False
+            self.tried = False
+            platforms.append(self)
+
+        def draw(self):
+            pygame.draw.rect(self.screen,self.color,(self.pos[0],self.pos[1],self.length,self.height))
+
+        def movement(self):
+            self.pos[0] -= player_velocity[0]
+
+    class enemy_class:
+        def __init__(self,enemies,enemy_width,enemy_height,platform,screen,enemy_color,enemy_speed):
+            self.width = enemy_width
+            self.height = enemy_height
+            self.pos = [(platform.pos[0] + platform.length) - self.width,platform.pos[1]-self.height]
+            self.color = enemy_color
+            self.screen = screen
+            self.platform = platform
+            self.speed = -enemy_speed
+            self.off_screen = False
+            self.can_come_in1 = True
+            self.can_come_in2 = True
+            self.list = enemies
+            self.list.append(self)
+
+        def enemy_movement(self,player_velocity):
+
+            if self.pos[0] <= self.platform.pos[0] and self.pos[0] and self.can_come_in1:
+                self.can_come_in1 =  False
+                self.can_come_in2 = True
+                self.speed *= -1
+
+            elif self.pos[0] + self.width - 1.5*abs(self.speed)  >= self.platform.pos[0] + self.platform.length and self.can_come_in2:
+                self.speed *= -1
+                self.can_come_in2 =  False
+                self.can_come_in1 = True
+
+            self.pos[0] += self.speed - player_velocity[0]
+
+        def draw_enemy(self):
+            pygame.draw.rect(self.screen,self.color,(self.pos[0],self.pos[1],self.width,self.height))
+
+        def enemy_collision(self,player_pos,player_width,player_height,enemies,player_velocity,game_over,score,extra_jump):
+
+            if self.pos[0] > player_pos[0] and self.pos[0] < player_pos[0] + player_width or player_pos[0] > self.pos[0] and player_pos[0] < self.pos[0] + self.width:
+
+                if player_velocity[1] > 0:
+
+                    if player_pos[1] + player_height >= self.pos[1] and player_pos[1] + player_height < self.pos[1] + (self.height/2):
+                        self.list.remove(self)
+                        score += 5
+                        extra_jump = 5
+
+                else:
+                    if (self.pos[1] <= player_pos[1] + player_height and self.pos[1] >= player_pos[1]) or player_pos[1] <= self.pos[1] + self.height and player_pos[1] >= self.pos[1] :
+                        game_over = True
+
+            return game_over, score, extra_jump
+
+    class bullet_class:
+        def __init__(self,bullet_speed,bullets,shooty_enemy,screen,bullet_dimensions,bullet_color):
+            self.list = bullets
+            self.speed = bullet_speed
+            self.shooty_enemy = shooty_enemy
+            self.pos = [shooty_enemy.pos[0],shooty_enemy.pos[1]+12]
+            self.screen = screen
+            self.dimensions = bullet_dimensions
+            self.color = bullet_color
+            self.list.append(self)
+
+        def draw_bullet(self):
+            pygame.draw.rect(self.screen,self.color,(self.pos[0],self.pos[1],self.dimensions[0],self.dimensions[1]))
+
+        def bullet_movement(self,player_velocity):
+            self.pos[0] -= self.speed + player_velocity[0]
+            return self.pos
+
+        def bullet_collision (self,player_pos,game_over):
+            if self.pos[0] > player_pos[0] and self.pos[0] < player_pos[0] + player_width or player_pos[0] > self.pos[0] and player_pos[0] < self.pos[0] + self.dimensions[0]:
+                if (self.pos[1] <= player_pos[1] + player_height and self.pos[1] >= player_pos[1]) or player_pos[1] <= self.pos[1] + self.dimensions[1] and player_pos[1] >= self.pos[1] :
+                    game_over = True
+
+            return game_over
+
+    class shooty_enemy_class(enemy_class):
+        def shoot(self,frame_counter):
+            if frame_counter % 120 == 0:
+                bullet_class(bullet_speed,bullets,self,screen,bullet_dimensions,bullet_color)
+
+
+
+    #platform instances
+    start_platform = platform(screen,platform_color,[-500,height-platform_height],5*long_platform_length,platform_height,platforms)
+    start_platform.tried = True
+    platform2 = platform(screen,platform_color,[600,height-200],normal_platform_length,platform_height,platforms)
+    platform3 = platform(screen,platform_color,[1000, height- 400],normal_platform_length,platform_height,platforms)
+    #platform4 = platform(screen,platform_color,[0,height-platform_height],10*long_platform_length,platform_height,platforms)
+    # enemy_class(enemies,enemy_width,enemy_height,platform4,screen,enemy_color,enemy_speed)
+    #example_shooty_enemy = shooty_enemy_class(shooty_enemies,enemy_width,enemy_height,start_platform,screen,enemy_color,shooty_enemy_speed)
+    #example_bullet = bullet_class(bullet_speed,bullets,example_shooty_enemy,screen,bullet_dimensions,bullet_color)
+
+
+
+    while not game_over:
+
+        #constantly updating general game variables
+
+        player_crouch_pos = player_pos[1]+player_crouch_height
+
+        frame_counter += 1
+
+        score += 1/60
+
+        extra_jump -= 1
+
+        #detects collisons and hadles a few variables related to collisons
+        for platfor in platforms:
+            if player_pos[1]+player_height == platfor.pos[1]:
+                touching += 1
+            if touching == 2:
+                jump_available = 1
+            if collision_detect(player_pos,player_width,player_height,platfor):
+                #wjump_available = 1
+                pygame.event.post(collison)
+                player_pos[1] -= (player_pos[1] + player_height) - platfor.pos[1]
+                player_velocity[1] = 0
+                #if abs(player_velocity[0])  <= 2.9 and not a_held and not d_held:
+                #    player_velocity[0] = -screen_speed
+
+        if not pygame.event.peek(CATONKEYBOARD):
+            if w_released:
+                has_jumped = True
+            touching = 0
+
+        #handles player movement
+        if a_held:
+            player_velocity[0] -= player_speed
+
+        if d_held:
+            player_velocity[0] += player_speed
+
+        if w_held and jump_available > 0 and not  has_jumped and not w_released:
+            player_velocity[1] -= player_jump_speed
+            w_held_duration += 1
+            jump_available -= jump_max_time/10
+
+        #gets all the events
+        for event in pygame.event.get():
+
+            #allows closing the game
+            if event.type == pygame.QUIT:
+                sys.exit()
+
+            #checks for pressed keys
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+                    sys.exit()
+
+                if event.key == pygame.K_a:
+                    a_held = True
+
+                if event.key == pygame.K_d:
+                    d_held = True
+
+                if event.key == pygame.K_w:
+                    w_held = True
+                    if not has_jumped:
+                        w_released =False
+
+                if event.key == pygame.K_s:
+                    s_held = True
+                    player_height = player_crouch_height
+                    player_pos[1] = player_crouch_pos
+
+            #checks for released keys
+            if event.type == pygame.KEYUP:
+
+                if event.key == pygame.K_a:
+                    a_held = False
+
+                if event.key == pygame.K_d:
+                    d_held = False
+
+                if event.key == pygame.K_w:
+                    w_held = False
+                    w_held_duration = 0
+                    w_released = True
+
+                if event.key == pygame.K_s:
+                    s_held = False
+                    player_height = player_standing_height
+                    player_pos[1] -= player_crouch_height
+
+            if event.type == CATONKEYBOARD:
+                has_jumped = False
+
+        #screen is filled with the background
+        screen.fill(background_color)
+
+        #applies gravity
+        if extra_jump < 0:
+            player_velocity[1] = gravity(player_velocity,player_width,player_height,platforms,gravity_strength)[1]
+        else:
+            player_velocity[1] = -20
+
+        if player_pos[1] >= height:
+            game_over = True
+
+        for idx, enemy in enumerate(enemies):
+            enemy.enemy_movement(player_velocity)
+            game_over, score, extra_jump = enemy.enemy_collision(player_pos,player_width,player_height,enemies,player_velocity,game_over,score,extra_jump)
+            if enemy.pos[0] <- 500:
+                enemies.pop(idx)
+
+            if enemy.pos[0] < 0:
+                enemy.off_screen = True
+
+            elif enemy.pos[0] > 0:
+                enemy.off_screen = False
+
+            if not enemy.off_screen:
+                enemy.draw_enemy()
+
+        for idx, shooty_enemy in enumerate(shooty_enemies):
+            shooty_enemy.enemy_movement(player_velocity)
+            shooty_enemy.draw_enemy()
+            game_over, score, extra_jump = shooty_enemy.enemy_collision(player_pos,player_width,player_height,enemies,player_velocity,game_over,score,extra_jump)
+            shooty_enemy.shoot(frame_counter)
+
+        for idx, bullet in enumerate(bullets):
+            bullet.pos =bullet.bullet_movement(player_velocity)
+            bullet.draw_bullet()
+            game_over = bullet.bullet_collision(player_pos,game_over)
+
+            if bullet.pos[0] < -100:
+                bullets.pop(idx)
+
+        #creates, moves and draws the platforms
+        time_since_spawn = create_platforms(screen,platform_color,normal_platform_length,long_platform_length,
+        short_platform_length,super_long_platform_length,platform_height,platforms,frame_counter,can_spwan,time_since_spawn)
+
+        for platfor in platforms:
+            platfor.movement()
+            platfor.draw()
+
+            enemy_type = random.random()
+
+            if enemy_type < 1/2:
+
+                if platfor.length == super_long_platform_length and not platfor.enemy:
+                    enemy_class(enemies,enemy_width,enemy_height,platfor,screen,enemy_color,enemy_speed)
+                    platfor.enemy = True
+
+                if random.random() < enemy_spawn_probability and not platfor.enemy and not platfor.tried:
+                    enemy_class(enemies,enemy_width,enemy_height,platfor,screen,enemy_color,enemy_speed)
+                    platfor.enemy = True
+                platfor.tried = True
+
+            else:
+                if platfor.length == super_long_platform_length and not platfor.enemy:
+                    shooty_enemy_class(shooty_enemies,enemy_width,enemy_height,platfor,screen,enemy_color,shooty_enemy_speed)
+                    platfor.enemy = True
+                if random.random() < enemy_spawn_probability and not platfor.enemy and not platfor.tried:
+                    shooty_enemy_class(shooty_enemies,enemy_width,enemy_height,platfor,screen,enemy_color,shooty_enemy_speed)
+                    platfor.enemy = True
+                    platfor.tried = True
+
+        #draw the player
+
+        if player_velocity[1] > 0:
+            if player_velocity[1] > player_max_velocity[1]:
+                player_velocity[1] = player_max_velocity[1]
+        else:
+            if abs(player_velocity[1]) > player_max_velocity[1]:
+                    player_velocity[1] = -player_max_velocity[1]
+
+        player_pos[1] += player_velocity[1]
+
+        if player_pos[0] < 0:
+            player_pos[0] = 0
+
+        pygame.draw.rect(screen,player_color,(player_pos[0],player_pos[1],player_width,player_height))
+
+        air_resistance = player_velocity[0]/6
+
+        if player_velocity[0] != 0:
+            player_velocity[0] -= air_resistance
+
+        #set fps
+        clock.tick(60)
+
+        text3 = 'Score: ' + str(int(score))
+        label3 = myfont3.render(text3,1,score_clolor)
+        screen.blit(label3,(width-200,height-40))
+
+        #refershing the screen
+        pygame.display.update()
+
+    while True:
+
+        clock.tick(60)
+        text = 'Game Over'
+        text2 = 'Press space to play again'
+        label = myfont.render(text,1,game_over_color)
+        label2 = myfont2.render(text2,1,game_over_color)
+        screen.blit(label,(width-900,height-600))
+        screen.blit(label2,(width-875,height-450))
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_SPACE:
+                    main()
+
+                if event.key == pygame.K_ESCAPE:
+                    sys.exit()
+
+            if event.type == pygame.QUIT:
+                sys.exit()
+
+main()
